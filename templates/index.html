@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pick a file from Google Drive</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Styles -->
+  <style>
+    :root {
+      --bg: #121212;
+      --card-bg: #1e1e1e;
+      --border: #2e2e2e;
+      --text: #e0e0e0;
+      --text-muted: #9e9e9e;
+      --accent: #ffffff;
+      --accent-hover: #cccccc;
+      --focus: #80bfff;
+      --shadow: 0 2px 6px rgba(0,0,0,0.4);
+      --shadow-lg: 0 6px 18px rgba(0,0,0,0.6);
+      --radius: 0.75rem;
+      --tap: 48px;
+    }
+
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.6; }
+
+    .container { max-width: 980px; margin: 0 auto; padding: 1.25rem; text-align: center; }
+
+    h1 { font-size: clamp(1.35rem, 2.5vw + 0.8rem, 1.8rem); font-weight: 600; margin: 0 0 1.5rem; color: var(--accent); }
+
+    /* Centered buttons */
+    .actions { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+
+    button, a.button {
+      padding: 0.8rem 1rem; border: 1px solid var(--border); border-radius: var(--radius);
+      cursor: pointer; background: var(--card-bg); color: var(--text); font-size: 0.95rem;
+      transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.06s;
+    }
+    button:hover:not(:disabled), a.button:hover { background: var(--accent-hover); color: #000; border-color: var(--accent-hover); }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .meta { color: var(--text-muted); font-size: 0.92rem; margin-bottom: 0.75rem; text-align: center; }
+
+    /* File list - single column */
+    .file-list { display: flex; flex-direction: column; gap: 1.5rem; align-items: center; }
+
+    .card { width: 100%; max-width: 600px; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; background: var(--card-bg); box-shadow: var(--shadow); transition: transform 0.15s ease, box-shadow 0.15s ease; text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+    .card strong { display: block; font-size: 1rem; font-weight: 600; color: var(--accent); word-break: break-word; margin-bottom: 0.5rem; }
+    .card .meta { margin-top: 0.35rem; font-size: 0.85rem; text-align: center; }
+    .card .row { margin-top: 0.75rem; display: flex; justify-content: center; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+    .preview { margin-top: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; white-space: pre-wrap; background: #0f0f0f; border-radius: 0.5rem; padding: 0.6rem; overflow: hidden; max-height: 40vh; width: 100%; }
+    .preview iframe, .preview video, .preview audio, .preview img { width: 100%; border: 0; border-radius: 8px; display: block; }
+    .preview iframe { height: 50vh; }
+  </style>
+</head>
+<body>
+  <main class="container" role="main">
+    <h1>Pick from Google Drive</h1>
+
+    <div class="actions" role="group" aria-label="Authentication and actions">
+      <button id="authBtn" type="button">Sign in with Google</button>
+      <button id="pickBtn" type="button" disabled>Choose from Drive</button>
+    </div>
+
+    <div id="status" class="meta" aria-live="polite">Status: not signed in</div>
+    <div id="files" class="file-list" aria-live="polite" aria-busy="false"></div>
+  </main>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js" async defer></script>
+
+
+  <!-- App logic -->
+  <script>
+    // ====== CONFIG: replace these with your own values ======
+    const CLIENT_ID = "{{ CLIENT_ID }}";
+    const API_KEY   = "{{ API_KEY }}";
+    // const APP_ID = "YOUR_PROJECT_NUMBER"; // optional
+    // ========================================================
+
+    // Scopes: read-only is enough to pick + download file contents
+    const SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+
+    let tokenClient;
+    let accessToken = null;
+    let pickerReady = false;
+
+    const statusEl = document.getElementById('status');
+    const filesEl  = document.getElementById('files');
+    const authBtn  = document.getElementById('authBtn');
+    const pickBtn  = document.getElementById('pickBtn');
+
+    // Load Picker API
+    function loadPickerApi() {
+      window.gapi.load('picker', { callback: () => { pickerReady = true; } });
+    }
+
+    // Initialize GIS token client
+    function initGIS() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPE,
+        callback: (resp) => {
+          if (resp.error) {
+            console.error(resp);
+            setStatus("Status: auth error");
+            return;
+          }
+          accessToken = resp.access_token;
+          setStatus("Status: signed in");
+          pickBtn.disabled = false;
+          if (pickBtn.dataset.pending === "1") {
+            pickBtn.dataset.pending = "0";
+            openPicker();
+          }
+        },
+      });
+    }
+
+    // Request (or refresh) token
+    function ensureAccessToken(thenOpenPicker = false) {
+      if (accessToken) { if (thenOpenPicker) openPicker(); return; }
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+      if (thenOpenPicker) pickBtn.dataset.pending = "1";
+    }
+
+    // Build and open the Google Drive Picker
+    function openPicker() {
+      if (!pickerReady || !accessToken) return;
+
+      const view = new google.picker.DocsView()
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(false);
+
+      const picker = new google.picker.PickerBuilder()
+        .enableFeature(google.picker.Feature.NAV_HIDDEN)
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .setDeveloperKey(API_KEY)
+        .setOAuthToken(accessToken)
+        // .setAppId(APP_ID)
+        .addView(view)
+        .setCallback(pickerCallback)
+        .setTitle("Select files from your Google Drive")
+        .build();
+
+      picker.setVisible(true);
+    }
+
+    // Handle picker response
+    async function pickerCallback(data) {
+      if (data.action !== google.picker.Action.PICKED) return;
+
+      setBusy(true);
+      for (const doc of data.docs) {
+        const fileId   = doc.id;
+        const name     = doc.name || doc.nameWithoutExtension || fileId;
+        const mimeType = doc.mimeType || 'application/octet-stream';
+        const webView  = doc.url || doc.webViewLink || null;
+
+        // Download file bytes using Drive API (alt=media)
+        let blob, fileObj, size;
+        try {
+          const res = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          if (!res.ok) throw new Error(`Drive download failed: ${res.status}`);
+          blob = await res.blob();
+          size = blob.size;
+
+          // Wrap in a File so you can upload via FormData
+          fileObj = new File([blob], name, { type: mimeType });
+
+          renderPickedFile({ fileId, name, mimeType, size, blob, webView, fileObj });
+        } catch (err) {
+          console.error(err);
+          renderPickedFile({ fileId, name, mimeType, size: 'unknown', blob: null, webView, fileObj: null, error: err.message });
+        }
+      }
+      setBusy(false);
+    }
+
+    function renderPickedFile({ fileId, name, mimeType, size, blob, webView, fileObj, error }) {
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const idShort = (fileId || '').slice(0, 8) + '…';
+      const sizeText = typeof size === 'number' ? formatBytes(size) : size;
+
+      card.innerHTML = `
+        <strong>${escapeHTML(name)}</strong>
+        <div class="meta">
+          ID: ${escapeHTML(idShort)} • Type: ${escapeHTML(mimeType)} • Size: ${escapeHTML(String(sizeText))}
+          ${webView ? ` • <a href="${webView}" target="_blank" rel="noopener">Open in Drive</a>` : ''}
+          ${error ? ` • Error: ${escapeHTML(error)}` : ''}
+        </div>
+        <div class="row">
+          ${blob ? `<a id="dl" class="button" download="${escapeAttr(name)}">Download</a>` : ''}
+          ${fileObj ? `<button id="uploadBtn" type="button">Upload</button>` : ''}
+          <button id="removeBtn" type="button" class="secondary">Remove</button>
+        </div>
+        <div class="preview" id="preview"></div>
+      `;
+
+      // Per-file remove (fix #1)
+      const removeBtn = card.querySelector('#removeBtn');
+      removeBtn?.addEventListener('click', () => { card.remove(); });
+
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const dl = card.querySelector('#dl');
+        if (dl) dl.href = url;
+
+        // RICH PREVIEW for many file types (fix #2)
+        const preview = card.querySelector('#preview');
+        tryRenderPreview({ url, name, mimeType, blob, previewEl: preview });
+      }
+
+      // TODO: change this to your backend URL
+      const UPLOAD_URL = 'http://localhost:5500/upload';
+
+      if (fileObj) {
+        const uploadBtn = card.querySelector('#uploadBtn');
+        uploadBtn?.addEventListener('click', async () => {
+          uploadBtn.disabled = true;
+          uploadBtn.textContent = 'Uploading…';
+          try {
+            const formData = new FormData();
+            formData.append('file', fileObj, fileObj.name);
+
+            const res = await fetch(UPLOAD_URL, { method: 'POST', body: formData });
+            const text = await res.text();
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText} – ${text || 'no body'}`);
+
+            uploadBtn.textContent = 'Uploaded!';
+          } catch (e) {
+            console.error(e);
+            uploadBtn.textContent = 'Upload failed';
+            uploadBtn.disabled = false;
+            alert(`Upload error: ${e.message}`);
+          }
+        });
+      }
+
+      filesEl.appendChild(card);
+    }
+
+    // ====== PREVIEW RENDERERS ======
+    function tryRenderPreview({ url, name, mimeType, blob, previewEl }) {
+      // Images
+      if (mimeType.startsWith('image/')) {
+        const img = new Image();
+        img.src = url; img.alt = name; img.style.maxWidth = '100%';
+        previewEl.appendChild(img); return;
+      }
+
+      // Text / JSON
+      if (mimeType.startsWith('text/') || mimeType === 'application/json') {
+        blob.text().then(t => {
+          previewEl.textContent = t.slice(0, 2000) + (t.length > 2000 ? '\n…' : '');
+        });
+        return;
+      }
+
+      // PDF
+      if (mimeType === 'application/pdf') {
+        const iframe = document.createElement('iframe');
+        iframe.src = url;
+        iframe.title = `${name} (PDF preview)`;
+        previewEl.appendChild(iframe); return;
+      }
+
+      // Video
+      if (mimeType.startsWith('video/')) {
+        const video = document.createElement('video');
+        video.controls = true; video.src = url; video.playsInline = true;
+        previewEl.appendChild(video); return;
+      }
+
+      // Audio
+      if (mimeType.startsWith('audio/')) {
+        const audio = document.createElement('audio');
+        audio.controls = true; audio.src = url;
+        previewEl.appendChild(audio); return;
+      }
+
+      // Common compressed archives – show basic note
+      if (/(zip|x-7z-compressed|x-rar-compressed|x-tar|x-gzip)$/i.test(mimeType)) {
+        previewEl.textContent = 'Archive preview not supported. Use Download or Open in Drive.'; return;
+      }
+
+      // Office docs and other binaries – offer Drive/webView and download
+      previewEl.textContent = 'Inline preview not supported for this file type. Use Download or Open in Drive.';
+    }
+
+    /* ====== UTILITIES ====== */
+    function setStatus(msg) { statusEl.textContent = msg; }
+    function setBusy(isBusy) { filesEl.setAttribute('aria-busy', isBusy ? 'true' : 'false'); }
+    function escapeHTML(str) { return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
+    function escapeAttr(str) { return escapeHTML(str).replace(/`/g, '&#96;'); }
+    function formatBytes(bytes) {
+      const units = ['B','KB','MB','GB','TB'];
+      let i = 0, n = bytes;
+      while (n >= 1024 && i < units.length-1) { n /= 1024; i++; }
+      return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+    }
+
+    /* ====== BOOT ====== */
+    window.addEventListener('load', () => {
+      // When both scripts finish, init things
+      const apiReady = new Promise(resolve => { const check = () => (window.gapi ? resolve() : setTimeout(check, 50)); check(); });
+      const gisReady = new Promise(resolve => { const check = () => (window.google && google.accounts && google.accounts.oauth2 ? resolve() : setTimeout(check, 50)); check(); });
+
+      Promise.all([apiReady, gisReady]).then(() => { loadPickerApi(); initGIS(); });
+
+      // Wire UI
+      authBtn.addEventListener('click', () => ensureAccessToken(false));
+      pickBtn.addEventListener('click', () => ensureAccessToken(true));
+
+      // Update CSS --vh on resize for iOS
+      const updateVh = () => { const vh = window.innerHeight * 0.01; document.documentElement.style.setProperty('--vh', `${vh}px`); };
+      updateVh();
+      window.addEventListener('resize', throttle(updateVh, 150), { passive: true });
+    });
+
+    /* Simple throttle to avoid layout jank on mobile */
+    function throttle(fn, wait) {
+      let after, timeout, last = 0;
+      return (...args) => {
+        const now = Date.now();
+        if (!last || now - last >= wait) { last = now; fn.apply(null, args); }
+        else {
+          clearTimeout(timeout);
+          after = wait - (now - last);
+          timeout = setTimeout(() => { last = Date.now(); fn.apply(null, args); }, after);
+        }
+      };
+    }
+  </script>
+</body>
+</html>

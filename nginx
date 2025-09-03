@@ -1,14 +1,18 @@
-# /etc/nginx/sites-available/drivepicker
+# sudo nano /etc/nginx/sites-available/drivepicker
 
 server {
     if ($host = drivepicker.imvickykumar999.online) {
         return 301 https://$host$request_uri;
     } # managed by Certbot
 
+
     listen 80;
     server_name drivepicker.imvickykumar999.online;
 
+    # Redirect HTTP to HTTPS
     return 301 https://$host$request_uri;
+
+
 }
 
 server {
@@ -17,36 +21,20 @@ server {
     ssl_certificate /etc/letsencrypt/live/drivepicker.imvickykumar999.online/fullchain.pem; # managed by Certbot
     ssl_certificate_key /etc/letsencrypt/live/drivepicker.imvickykumar999.online/privkey.pem; # managed by Certbot
 
+    # SSL settings (optional but recommended for security)
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers 'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384';
     ssl_prefer_server_ciphers on;
 
-    # Allow large uploads (set the size you want)
     client_max_body_size 1G;              # or 100M, etc.
     client_body_timeout 300s;
 
-    # If you stream uploads to the app, consider disabling request buffering:
-    # proxy_request_buffering off;
-
     location / {
-        proxy_pass http://127.0.0.1:5500;
+        proxy_pass http://127.0.0.1:5500;  # Flask app running on Gunicorn
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
     }
 
-    # (Optional) only bump limit on the upload route
-    # location /upload {
-    #     client_max_body_size 1G;
-    #     proxy_pass http://127.0.0.1:5500;
-    #     proxy_set_header Host $host;
-    #     proxy_set_header X-Real-IP $remote_addr;
-    #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    #     proxy_set_header X-Forwarded-Proto $scheme;
-    # }
 }

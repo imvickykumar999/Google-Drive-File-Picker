@@ -1,6 +1,13 @@
 # *Pick Files from Google Drive*
 
-<img width="1301" height="630" alt="image" src="https://github.com/user-attachments/assets/440db3e6-2bc4-4eec-b436-6c830e6c2810" />
+```bash
+sudo systemctl restart nginx
+sudo systemctl restart drivepicker
+```
+
+<img width="1326" height="706" alt="image" src="https://github.com/user-attachments/assets/eac7f11a-32d3-4d6d-9b1b-9d38ce6655f2" />
+
+<br><br>
 
 You’ll need to create and configure a project in the **Google Cloud Console** to get both your **Client ID** (for OAuth) and **API Key** (for Drive API/Picker). Here’s a step-by-step:
 

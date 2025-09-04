@@ -7,7 +7,11 @@
 
   <!-- Styles -->
   <style>
-    :root {
+    /* ===================== THEME TOGGLE ADDITIONS (variables) ===================== */
+    :root { color-scheme: light dark; }
+
+    /* Dark theme (default design you had) */
+    [data-theme="dark"] {
       --bg: #121212;
       --card-bg: #1e1e1e;
       --border: #2e2e2e;
@@ -21,6 +25,23 @@
       --radius: 0.75rem;
       --tap: 48px;
     }
+
+    /* Light theme */
+    [data-theme="light"] {
+      --bg: #f6f7f9;
+      --card-bg: #ffffff;
+      --border: #e6e8eb;
+      --text: #1d232a;
+      --text-muted: #657184;
+      --accent: #0b57d0;
+      --accent-hover: #2b70e4;
+      --focus: #7bb0ff;
+      --shadow: 0 2px 6px rgba(0,0,0,0.06);
+      --shadow-lg: 0 10px 24px rgba(0,0,0,0.08);
+      --radius: 0.75rem;
+      --tap: 48px;
+    }
+    /* ============================================================================ */
 
     html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.6; }
 
@@ -37,6 +58,8 @@
       transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.06s;
     }
     button:hover:not(:disabled), a.button:hover { background: var(--accent-hover); color: #000; border-color: var(--accent-hover); }
+    [data-theme="light"] button:hover:not(:disabled),
+    [data-theme="light"] a.button:hover { color: #fff; } /* contrast in light theme */
     button:active { transform: translateY(1px); }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
 
@@ -52,11 +75,68 @@
     .card .row { margin-top: 0.75rem; display: flex; justify-content: center; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 
     .preview { margin-top: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; white-space: pre-wrap; background: #0f0f0f; border-radius: 0.5rem; padding: 0.6rem; overflow: hidden; max-height: 40vh; width: 100%; }
+    [data-theme="light"] .preview { background: #f2f3f5; }
+
     .preview iframe, .preview video, .preview audio, .preview img { width: 100%; border: 0; border-radius: 8px; display: block; }
     .preview iframe { height: 50vh; }
+
+    /* ===================== THEME TOGGLE ADDITIONS (UI) ===================== */
+    .theme-toggle {
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      z-index: 1000;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      user-select: none;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      box-shadow: var(--shadow);
+    }
+    .switch {
+      position: relative;
+      width: 46px;
+      height: 26px;
+      display: inline-block;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: var(--border);
+      transition: .2s; border-radius: 999px;
+    }
+    .slider:before {
+      position: absolute; content: "";
+      height: 20px; width: 20px; left: 3px; top: 3px;
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      transition: .2s;
+      box-shadow: var(--shadow);
+    }
+    input:checked + .slider { background: var(--accent); }
+    input:checked + .slider:before { transform: translateX(20px); border-color: transparent; }
+    .theme-toggle .icon { line-height: 0; }
+    /* ===================================================================== */
   </style>
 </head>
-<body>
+<body data-theme="dark">
+  <!-- ===================== THEME TOGGLE ADDITIONS (markup) ===================== -->
+  <div class="theme-toggle" role="group" aria-label="Theme">
+    <span class="icon" aria-hidden="true">🌙</span>
+    <label class="switch">
+      <input id="themeSwitch" type="checkbox" aria-label="Toggle light / dark theme">
+      <span class="slider"></span>
+    </label>
+    <span class="icon" aria-hidden="true">☀️</span>
+  </div>
+  <!-- ========================================================================== -->
+
   <main class="container" role="main">
     <h1>Pick from Google Drive</h1>
 
@@ -71,7 +151,6 @@
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
-
 
   <!-- App logic -->
   <script>
@@ -92,6 +171,33 @@
     const filesEl  = document.getElementById('files');
     const authBtn  = document.getElementById('authBtn');
     const pickBtn  = document.getElementById('pickBtn');
+
+    /* ===================== THEME TOGGLE ADDITIONS (logic) ===================== */
+    const THEME_KEY = 'gdrive-picker-theme';
+    const switchEl = document.getElementById('themeSwitch');
+
+    // Decide initial theme: saved -> OS preference -> dark
+    function detectPreferredTheme() {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === 'light' || saved === 'dark') return saved;
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+             ? 'light' : 'dark';
+    }
+
+    function applyTheme(theme) {
+      document.body.setAttribute('data-theme', theme);
+      localStorage.setItem(THEME_KEY, theme);
+      switchEl.checked = (theme === 'light');
+    }
+
+    // Initialize theme ASAP
+    (function initTheme() { applyTheme(detectPreferredTheme()); })();
+
+    // Respond to toggle
+    switchEl.addEventListener('change', () => {
+      applyTheme(switchEl.checked ? 'light' : 'dark');
+    });
+    /* ======================================================================== */
 
     // Load Picker API
     function loadPickerApi() {
@@ -205,7 +311,6 @@
         <div class="preview" id="preview"></div>
       `;
 
-      // Per-file remove (fix #1)
       const removeBtn = card.querySelector('#removeBtn');
       removeBtn?.addEventListener('click', () => { card.remove(); });
 
@@ -214,7 +319,6 @@
         const dl = card.querySelector('#dl');
         if (dl) dl.href = url;
 
-        // RICH PREVIEW for many file types (fix #2)
         const preview = card.querySelector('#preview');
         tryRenderPreview({ url, name, mimeType, blob, previewEl: preview });
       }
@@ -232,10 +336,17 @@
             formData.append('file', fileObj, fileObj.name);
 
             const res = await fetch(UPLOAD_URL, { method: 'POST', body: formData });
-            const text = await res.text();
-            if (!res.ok) throw new Error(`${res.status} ${res.statusText} – ${text || 'no body'}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText} – ${data || 'no body'}`);
 
-            uploadBtn.textContent = 'Uploaded!';
+            const openLink = document.createElement('a');
+            openLink.href = data.download_url;
+            openLink.target = '_blank';
+            openLink.rel = 'noopener';
+            openLink.className = 'button';
+            openLink.textContent = 'Open File';
+
+            uploadBtn.replaceWith(openLink);
           } catch (e) {
             console.error(e);
             uploadBtn.textContent = 'Upload failed';
@@ -250,49 +361,33 @@
 
     // ====== PREVIEW RENDERERS ======
     function tryRenderPreview({ url, name, mimeType, blob, previewEl }) {
-      // Images
       if (mimeType.startsWith('image/')) {
         const img = new Image();
         img.src = url; img.alt = name; img.style.maxWidth = '100%';
         previewEl.appendChild(img); return;
       }
-
-      // Text / JSON
       if (mimeType.startsWith('text/') || mimeType === 'application/json') {
-        blob.text().then(t => {
-          previewEl.textContent = t.slice(0, 2000) + (t.length > 2000 ? '\n…' : '');
-        });
+        blob.text().then(t => { previewEl.textContent = t.slice(0, 2000) + (t.length > 2000 ? '\n…' : ''); });
         return;
       }
-
-      // PDF
       if (mimeType === 'application/pdf') {
         const iframe = document.createElement('iframe');
-        iframe.src = url;
-        iframe.title = `${name} (PDF preview)`;
+        iframe.src = url; iframe.title = `${name} (PDF preview)`;
         previewEl.appendChild(iframe); return;
       }
-
-      // Video
       if (mimeType.startsWith('video/')) {
         const video = document.createElement('video');
         video.controls = true; video.src = url; video.playsInline = true;
         previewEl.appendChild(video); return;
       }
-
-      // Audio
       if (mimeType.startsWith('audio/')) {
         const audio = document.createElement('audio');
         audio.controls = true; audio.src = url;
         previewEl.appendChild(audio); return;
       }
-
-      // Common compressed archives – show basic note
       if (/(zip|x-7z-compressed|x-rar-compressed|x-tar|x-gzip)$/i.test(mimeType)) {
         previewEl.textContent = 'Archive preview not supported. Use Download or Open in Drive.'; return;
       }
-
-      // Office docs and other binaries – offer Drive/webView and download
       previewEl.textContent = 'Inline preview not supported for this file type. Use Download or Open in Drive.';
     }
 
@@ -310,23 +405,19 @@
 
     /* ====== BOOT ====== */
     window.addEventListener('load', () => {
-      // When both scripts finish, init things
       const apiReady = new Promise(resolve => { const check = () => (window.gapi ? resolve() : setTimeout(check, 50)); check(); });
       const gisReady = new Promise(resolve => { const check = () => (window.google && google.accounts && google.accounts.oauth2 ? resolve() : setTimeout(check, 50)); check(); });
 
       Promise.all([apiReady, gisReady]).then(() => { loadPickerApi(); initGIS(); });
 
-      // Wire UI
       authBtn.addEventListener('click', () => ensureAccessToken(false));
       pickBtn.addEventListener('click', () => ensureAccessToken(true));
 
-      // Update CSS --vh on resize for iOS
       const updateVh = () => { const vh = window.innerHeight * 0.01; document.documentElement.style.setProperty('--vh', `${vh}px`); };
       updateVh();
       window.addEventListener('resize', throttle(updateVh, 150), { passive: true });
     });
 
-    /* Simple throttle to avoid layout jank on mobile */
     function throttle(fn, wait) {
       let after, timeout, last = 0;
       return (...args) => {

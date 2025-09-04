@@ -7,10 +7,10 @@
 
   <!-- Styles -->
   <style>
-    /* ===================== THEME TOGGLE ADDITIONS (variables) ===================== */
+    /* ===================== THEME VARIABLES ===================== */
     :root { color-scheme: light dark; }
 
-    /* Dark theme (default design you had) */
+    /* Dark theme (default) */
     [data-theme="dark"] {
       --bg: #121212;
       --card-bg: #1e1e1e;
@@ -41,7 +41,7 @@
       --radius: 0.75rem;
       --tap: 48px;
     }
-    /* ============================================================================ */
+    /* =========================================================== */
 
     html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.6; }
 
@@ -80,7 +80,7 @@
     .preview iframe, .preview video, .preview audio, .preview img { width: 100%; border: 0; border-radius: 8px; display: block; }
     .preview iframe { height: 50vh; }
 
-    /* ===================== THEME TOGGLE ADDITIONS (UI) ===================== */
+    /* ===================== THEME TOGGLE (Top-right) ===================== */
     .theme-toggle {
       position: fixed;
       bottom: 12px;
@@ -126,7 +126,7 @@
   </style>
 </head>
 <body data-theme="dark">
-  <!-- ===================== THEME TOGGLE ADDITIONS (markup) ===================== -->
+  <!-- ===================== THEME TOGGLE ===================== -->
   <div class="theme-toggle" role="group" aria-label="Theme">
     <span class="icon" aria-hidden="true">🌙</span>
     <label class="switch">
@@ -135,7 +135,7 @@
     </label>
     <span class="icon" aria-hidden="true">☀️</span>
   </div>
-  <!-- ========================================================================== -->
+  <!-- ======================================================== -->
 
   <main class="container" role="main">
     <h1>Pick from Google Drive</h1>
@@ -172,16 +172,15 @@
     const authBtn  = document.getElementById('authBtn');
     const pickBtn  = document.getElementById('pickBtn');
 
-    /* ===================== THEME TOGGLE ADDITIONS (logic) ===================== */
+    /* ===================== THEME TOGGLE (logic) ===================== */
     const THEME_KEY = 'gdrive-picker-theme';
     const switchEl = document.getElementById('themeSwitch');
 
-    // Decide initial theme: saved -> OS preference -> dark
     function detectPreferredTheme() {
       const saved = localStorage.getItem(THEME_KEY);
       if (saved === 'light' || saved === 'dark') return saved;
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
-             ? 'light' : 'dark';
+      return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+        ? 'light' : 'dark';
     }
 
     function applyTheme(theme) {
@@ -197,7 +196,7 @@
     switchEl.addEventListener('change', () => {
       applyTheme(switchEl.checked ? 'light' : 'dark');
     });
-    /* ======================================================================== */
+    /* ================================================================ */
 
     // Load Picker API
     function loadPickerApi() {
@@ -213,10 +212,18 @@
           if (resp.error) {
             console.error(resp);
             setStatus("Status: auth error");
+            // re-enable on error
+            authBtn.disabled = false;
+            authBtn.textContent = "Sign in with Google";
             return;
           }
           accessToken = resp.access_token;
           setStatus("Status: signed in");
+
+          // Lock the sign-in button after success
+          authBtn.disabled = true;
+          authBtn.textContent = "Signed in";
+
           pickBtn.disabled = false;
           if (pickBtn.dataset.pending === "1") {
             pickBtn.dataset.pending = "0";
@@ -229,6 +236,11 @@
     // Request (or refresh) token
     function ensureAccessToken(thenOpenPicker = false) {
       if (accessToken) { if (thenOpenPicker) openPicker(); return; }
+
+      // prevent double clicks while requesting token
+      authBtn.disabled = true;
+      authBtn.textContent = "Signing in…";
+
       tokenClient.requestAccessToken({ prompt: 'consent' });
       if (thenOpenPicker) pickBtn.dataset.pending = "1";
     }
@@ -323,8 +335,9 @@
         tryRenderPreview({ url, name, mimeType, blob, previewEl: preview });
       }
 
-      // TODO: change this to your backend URL
+      // const UPLOAD_URL = 'https://drivepicker.pythonanywhere.com/upload';
       const UPLOAD_URL = 'http://localhost:5500/upload';
+      // const UPLOAD_URL = 'https://drivepicker.imvickykumar999.online/upload';
 
       if (fileObj) {
         const uploadBtn = card.querySelector('#uploadBtn');
